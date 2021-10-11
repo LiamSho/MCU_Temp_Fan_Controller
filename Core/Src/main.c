@@ -41,15 +41,20 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+
+#define TIM_CLOCK 6000000;
+#define TIM_PRESCALAR 6;
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
 
-/* USER CODE END PM */
-
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "EndlessLoop"
+
+/* USER CODE END PM */
+
 /* Private variables ---------------------------------------------------------*/
 ADC_HandleTypeDef hadc;
 DMA_HandleTypeDef hdma_adc;
@@ -83,6 +88,37 @@ static void MX_USART1_UART_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+/* Constants */
+
+// Timer clock speed.
+const int Timer_Clock_Speed = 6000000;
+// Timer 3 prescalar.
+const int Timer_3_Prescalar = 6;
+
+/* Motor control */
+
+// Motor control PWM duty cycle.
+uint16_t Motor_PWM_Duty_Cycle = 0;
+// Motor speed, round per second.
+uint16_t Motor_Speed = 0;
+
+/* Heater control */
+
+// ADC result set by DMA.
+uint16_t ADC_Output = 0;
+// Heater control PWM duty cycle.
+uint16_t Heater_PWM_Duty_Cycle = 0;
+
+/* Other variables */
+
+// For TIM3 interrupt indicate if is the first input.
+int TIM_3_Is_First_Capture = 0;
+// For TIM3 interrupt, the first captured value.
+uint16_t IC_Val_1 = 0;
+// For TIM3 interrupt, the second captured value.
+uint16_t IC_Val_2 = 0;
+
 
 /* USER CODE END 0 */
 
@@ -119,6 +155,9 @@ int main(void) {
     MX_TIM3_Init();
     MX_USART1_UART_Init();
     /* USER CODE BEGIN 2 */
+
+    // Start TIM3 Input Capture interrupt on channel 1.
+    HAL_TIM_IC_Start(&htim3, TIM_CHANNEL_1);
 
     /* USER CODE END 2 */
 
@@ -408,6 +447,48 @@ static void MX_GPIO_Init(void) {
 }
 
 /* USER CODE BEGIN 4 */
+
+/**
+ * @brief Timer Interrupt, generally for motor speed monitor.
+ * @param htim Timer pointer
+ * @retval None
+ */
+void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef* htim)
+{
+    if(htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1)
+    {
+        uint16_t TIM_Period = 0;
+
+        if(TIM_3_Is_First_Capture == 0)
+        {
+            IC_Val_1 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1);
+            TIM_3_Is_First_Capture = 1;
+        }
+
+        else
+        {
+            IC_Val_2 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2);
+
+            if (IC_Val_2 > IC_Val_1)
+            {
+                TIM_Period = IC_Val_2 - IC_Val_1;
+            }
+
+            else if (IC_Val_1 > IC_Val_2)
+            {
+                TIM_Period = (0xffff - IC_Val_1) + IC_Val_2;
+            }
+
+            float refClock = (float)Timer_Clock_Speed / (float)Timer_3_Prescalar;
+            float frequency = refClock/TIM_Period;
+
+            Motor_Speed = frequency * 60000000;
+
+            __HAL_TIM_SET_COUNTER(htim, 0);
+            TIM_3_Is_First_Capture = 0;
+        }
+    }
+}
 
 /* USER CODE END 4 */
 
