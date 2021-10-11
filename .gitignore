@@ -1,0 +1,24 @@
+# Project
+.idea
+.mxproject
+.osx.project
+.cproject
+.project
+
+# CMake
+cmake-build-debug
+CMakeLists.txt
+CMakeLists_template.txt
+
+# Generated files
+
+Drivers
+startup
+Core/Inc/stm32f0xx_hal_conf.h
+Core/Inc/stm32f0xx_it.h
+Core/Src/stm32f0xx_hal_msp.c
+Core/Src/stm32f0xx_it.c
+Core/Src/syscalls.c
+Core/Src/system_stm32f0xx.c
+
+STM32F030K6Tx_FLASH.ld
