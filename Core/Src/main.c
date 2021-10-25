@@ -84,6 +84,8 @@ static void MX_TIM3_Init(void);
 static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
 
+static uint32_t Duty_Cycle_Getter(uint32_t dutyCycle, uint32_t currentValue, uint32_t target, uint32_t offset);
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -99,16 +101,18 @@ const int Timer_3_Prescalar = 6;
 /* Motor control */
 
 // Motor control PWM duty cycle.
-uint16_t Motor_PWM_Duty_Cycle = 0;
+uint32_t Motor_PWM_Duty_Cycle = 0;
 // Motor speed, round per second.
-uint16_t Motor_Speed = 0;
+uint32_t Motor_Speed = 0;
 
 /* Heater control */
 
 // ADC result set by DMA.
-uint16_t ADC_Output = 0;
+uint32_t ADC_Output = 0;
+// Heater temperature
+uint32_t Heater_Temperature = 0;
 // Heater control PWM duty cycle.
-uint16_t Heater_PWM_Duty_Cycle = 0;
+uint32_t Heater_PWM_Duty_Cycle = 0;
 
 /* Other variables */
 
@@ -119,6 +123,17 @@ uint16_t IC_Val_1 = 0;
 // For TIM3 interrupt, the second captured value.
 uint16_t IC_Val_2 = 0;
 
+/* Control target */
+
+// Temperature control target
+uint32_t Temperature_Control_Target = 60;
+// Motor control target (RPM)
+uint32_t Motor_Control_Target = 2000;
+
+// Temperature control offset
+uint32_t Temperature_Control_Offset = 2;
+// Motor control target
+uint32_t Motor_Control_Offset = 100;
 
 /* USER CODE END 0 */
 
@@ -156,8 +171,15 @@ int main(void) {
     MX_USART1_UART_Init();
     /* USER CODE BEGIN 2 */
 
+    // Start TIM1 PWM output on channel 1 (H_PWM) and channel 2 (F_PWM).
+    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
+
     // Start TIM3 Input Capture interrupt on channel 1.
     HAL_TIM_IC_Start(&htim3, TIM_CHANNEL_1);
+
+    // Start DMA mode ADC.
+    HAL_ADCEx_Calibration_Start(&hadc);
 
     /* USER CODE END 2 */
 
@@ -165,8 +187,22 @@ int main(void) {
     /* USER CODE BEGIN WHILE */
     while (1) {
         /* USER CODE END WHILE */
-
         /* USER CODE BEGIN 3 */
+        HAL_ADC_Start_DMA(&hadc, &ADC_Output, 1);
+
+        // Temperature PWM
+        Heater_PWM_Duty_Cycle = Duty_Cycle_Getter(Heater_PWM_Duty_Cycle, Heater_Temperature, Temperature_Control_Target, Temperature_Control_Offset);
+        // Motor PWM
+        Motor_PWM_Duty_Cycle = Duty_Cycle_Getter(Motor_PWM_Duty_Cycle, Motor_Speed, Motor_Control_Target, Motor_Control_Offset);
+
+        // Set TIM1 PWM duty cycle
+        // PA8 - TIM1_CH1 => Heater (H_PWM)
+        // PA9 - TIM1_CH2 => Motor (F_PWM)
+        __HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, Heater_PWM_Duty_Cycle);
+        __HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, Motor_PWM_Duty_Cycle);
+
+        // Delay for a while
+        HAL_Delay(200);
     }
     /* USER CODE END 3 */
 }
@@ -482,11 +518,72 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef* htim)
             float refClock = (float)Timer_Clock_Speed / (float)Timer_3_Prescalar;
             float frequency = refClock/TIM_Period;
 
-            Motor_Speed = frequency * 60000000;
+            Motor_Speed = 60 * frequency / 9;
 
             __HAL_TIM_SET_COUNTER(htim, 0);
             TIM_3_Is_First_Capture = 0;
         }
+    }
+}
+
+/**
+ * @brief ADC DMA interrupt callback from heater.
+ * @param hadc ADC pointer
+ * @retval None
+ */
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
+{
+    // Curve fitting result
+    Heater_Temperature = 0.2498 * ADC_Output - 313.2;
+}
+
+/**
+ * @brief Get new pwm duty cycle by the current pwm duty cycle, value, target and offset.
+ * @retval New pwm duty cycle
+ */
+uint32_t Duty_Cycle_Getter(uint32_t dutyCycle, uint32_t currentValue, uint32_t target, uint32_t offset)
+{
+    uint32_t top = target + offset;
+    uint32_t down = target - offset;
+
+    if (currentValue >= top)
+    {
+        if(dutyCycle <= 2)
+        {
+            return 0;
+        }
+
+        return dutyCycle -= 3;
+    }
+
+    if (currentValue < top && currentValue > target)
+    {
+        if(dutyCycle <= 0)
+        {
+            return 0;
+        }
+
+        return dutyCycle--;
+    }
+
+    if (currentValue > down && currentValue < target)
+    {
+        if(dutyCycle >=98)
+        {
+            return 100;
+        }
+
+        return dutyCycle++;
+    }
+
+    if (currentValue <= down)
+    {
+        if(dutyCycle >= 100)
+        {
+            return 100;
+        }
+
+        return dutyCycle += 3;
     }
 }
 
