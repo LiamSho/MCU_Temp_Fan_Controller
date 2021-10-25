@@ -534,7 +534,7 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef* htim)
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 {
     // Curve fitting result
-    Heater_Temperature = 0.2498 * ADC_Output - 313.2;
+    Heater_Temperature = 0.09991 * ADC_Output - 313.2;
 }
 
 /**
