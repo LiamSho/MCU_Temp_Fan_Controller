@@ -128,7 +128,7 @@ uint16_t IC_Val_2 = 0;
 // Temperature control target
 uint32_t Temperature_Control_Target = 60;
 // Motor control target (RPM)
-uint32_t Motor_Control_Target = 2000;
+uint32_t Motor_Control_Target = 2800;
 
 // Temperature control offset
 uint32_t Temperature_Control_Offset = 2;
@@ -176,7 +176,7 @@ int main(void) {
     HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
 
     // Start TIM3 Input Capture interrupt on channel 1.
-    HAL_TIM_IC_Start(&htim3, TIM_CHANNEL_1);
+    HAL_TIM_IC_Start_IT(&htim3, TIM_CHANNEL_1);
 
     // Start DMA mode ADC.
     HAL_ADCEx_Calibration_Start(&hadc);
@@ -491,7 +491,7 @@ static void MX_GPIO_Init(void) {
  */
 void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef* htim)
 {
-    if(htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1)
+    if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1)
     {
         uint16_t TIM_Period = 0;
 
@@ -503,7 +503,7 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef* htim)
 
         else
         {
-            IC_Val_2 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2);
+            IC_Val_2 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1);
 
             if (IC_Val_2 > IC_Val_1)
             {
@@ -548,12 +548,12 @@ uint32_t Duty_Cycle_Getter(uint32_t dutyCycle, uint32_t currentValue, uint32_t t
 
     if (currentValue >= top)
     {
-        if(dutyCycle <= 2)
+        if(dutyCycle <= 9)
         {
             return 0;
         }
 
-        return dutyCycle -= 3;
+        return dutyCycle -= 10;
     }
 
     if (currentValue < top && currentValue > target)
@@ -568,9 +568,9 @@ uint32_t Duty_Cycle_Getter(uint32_t dutyCycle, uint32_t currentValue, uint32_t t
 
     if (currentValue > down && currentValue < target)
     {
-        if(dutyCycle >=98)
+        if(dutyCycle >= 998)
         {
-            return 100;
+            return 1000;
         }
 
         return dutyCycle++;
@@ -578,13 +578,14 @@ uint32_t Duty_Cycle_Getter(uint32_t dutyCycle, uint32_t currentValue, uint32_t t
 
     if (currentValue <= down)
     {
-        if(dutyCycle >= 100)
+        if(dutyCycle >= 1000)
         {
-            return 100;
+            return 1000;
         }
 
-        return dutyCycle += 3;
+        return dutyCycle += 10;
     }
+    return 0;
 }
 
 /* USER CODE END 4 */
